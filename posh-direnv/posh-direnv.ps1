@@ -8,12 +8,29 @@ function Set-DirEnvRc {
     Param(
         [switch]$Force
     )
-    $p = (Resolve-Path (Join-Path $pwd $psenvrcBase) -ErrorAction SilentlyContinue).Path
+
+    # Search for .psenvrc in current directory and parent directories
+    $p = $null
+    $psenvrcDir = $null
+    $searchPath = $pwd.Path
+    while ($searchPath -and -not $p) {
+        $candidate = Join-Path $searchPath $psenvrcBase
+        if (Test-Path $candidate) {
+            $p = (Resolve-Path $candidate).Path
+            $psenvrcDir = $searchPath
+            break
+        }
+        $parentPath = Split-Path $searchPath -Parent
+        if ($parentPath -eq $searchPath) {
+            break  # Reached root directory
+        }
+        $searchPath = $parentPath
+    }
 
     if (Test-Path Env:PSDIRENV_DIR) {
         Write-Verbose "PSDIRENV_DIR is set"
         if ( -Not $pwd.Path.ToLower().StartsWith($env:PSDIRENV_DIR.ToLower()) -or
-            ($p -and $env:PSDIRENV_DIR -ne $pwd)) {
+            ($psenvrcDir -and $env:PSDIRENV_DIR -ne $psenvrcDir)) {
             Write-Verbose "Moved out of tree or new env requested"
             if(-Not $p) {
                 Write-Host "psdirenv: unloading"
@@ -41,7 +58,7 @@ function Set-DirEnvRc {
         return
     }
 
-    if (-not $Force -and $env:PSDIRENV_DIR -eq $pwd) {
+    if (-not $Force -and $env:PSDIRENV_DIR -eq $psenvrcDir) {
         Write-Verbose "$p already applyed"
         return
     }
@@ -58,7 +75,7 @@ function Set-DirEnvRc {
         $diffs.remove = $diff | Where-Object -Property SideIndicator -CEQ "=>" | Where-Object { $_.Name -notin $present }
         Write-Host "psenvdir: export " -NoNewLine
         Write-Host (@(($diffs.remove | Select-Object -ExpandProperty Name | ForEach-Object {"+$($_)"})) + ($diffs.changed | Select-Object -ExpandProperty Name | ForEach-Object {"~$($_)"}))
-        Set-Item -Path Env:PSDIRENV_DIR -Value $pwd.Path
+        Set-Item -Path Env:PSDIRENV_DIR -Value $psenvrcDir
         $diffs = $diffs | ConvertTo-Json -Compress
         $bytes = [System.Text.Encoding]::Unicode.GetBytes($diffs)
         $diffs = [Convert]::ToBase64String($bytes)
