@@ -66,7 +66,13 @@ function Set-DirEnvRc {
     if(Compare-DirEnvRc $p) {
         $origionalEnv = Get-ChildItem Env:
         Write-Host "psenvdir: loading $($p)"
-        Get-Content "$p" | Out-String | Invoke-Expression
+        # Execute .psenvrc in the directory where it resides so relative paths work
+        Push-Location $psenvrcDir
+        try {
+            Get-Content "$p" | Out-String | Invoke-Expression
+        } finally {
+            Pop-Location
+        }
         $modifiedEnv = Get-ChildItem Env:
         $diffs = @{}
         $diff = Compare-Object $origionalEnv $modifiedEnv -Property Name, Value -CaseSensitive
